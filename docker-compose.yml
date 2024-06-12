@@ -1,0 +1,13 @@
+version: '3.9'
+services:
+  ### MySQL Container
+  mysqldb8:
+    build:
+      context: .
+      args:
+        - MYSQL_DATABASE=demo
+        - MYSQL_USER=serbo
+        - MYSQL_PASSWORD=Test1234!
+        - MYSQL_ROOT_PASSWORD=Test1234!
+    ports:
+      - "3307:3306"
