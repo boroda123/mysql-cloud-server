@@ -1,0 +1,112 @@
+name: MySQL Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  REPOSITORY: ${{ github.event.repository.name }}
+  IMAGE_NAME: ${{ github.repository }}
+  ECR_SERVICE_ARN: arn:aws:apprunner:us-east-2:654654561932:service/spring-boot-service-staging/350d6d50e8f8434690754082945539b7
+  
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'oracle'
+      
+      - name: Build the Docker image
+        run: |
+          docker build . --file Dockerfile --tag mysql-cloud-server:$(date -u +%Y-%m-%d-%H%M%S)
+          echo "After Docker BUILD: image=${{ env.REGISTRY }}/${{ env.REPOSITORY }}:${{ env.IMAGE_NAME }}"
+ 
+        
+      #- name: Build the Docker Compose image
+      #  run: docker-compose build --tag docker-compose-spring-boot-service:$(date -u +%Y-%m-%d-%H%M%S)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build a docker container and
+          #push it to ECR so that it can
+          # be deployed to ECS.
+          echo "BEFORE ECR push: image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          #echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+
+      #################################
+      ### Start AWS deployment
+      #################################
+      - name: Deploy production with aws CLI
+        run: |
+          echo "Start deployment to AWS Runnre: ${{ env.ECR_SERVICE_ARN }} "
+          aws apprunner start-deployment --service-arn="${{ env.ECR_SERVICE_ARN }}"
+
+      - name: Wait for Deployment to Begin
+        run: |
+          STATUS=$(aws apprunner describe-service --query="Service.Status" --output=text --service-arn="${{ env.ECR_SERVICE_ARN }}")
+
+          until [ "${STATUS}" == "OPERATION_IN_PROGRESS" ];
+          do
+            echo "$(date) ${STATUS}"
+            STATUS=$(aws apprunner describe-service --query="Service.Status" --output=text --service-arn="${{ env.ECR_SERVICE_ARN }}")
+            sleep 10;
+          done
+
+      - name: Wait for Deployment to Complete
+        id: status
+        timeout-minutes: 10
+        run: |
+          STATUS=$(aws apprunner describe-service --query="Service.Status" --output=text --service-arn="${{ env.ECR_SERVICE_ARN }}")
+
+          while [ "${STATUS}" == "OPERATION_IN_PROGRESS" ];
+          do
+            echo "$(date) ${STATUS}"
+            STATUS=$(aws apprunner describe-service --query="Service.Status" --output=text --service-arn="${{ env.ECR_SERVICE_ARN }}")
+            sleep 30;
+          done
+          echo "deployment_status=${STATUS}"
+
+      - name: Check Deployment Status
+        id: check
+        run: |
+          if [ "${{ steps.status.outputs.deployment_status }}" == "RUNNING" ]; then
+            echo "Deployment successful"
+          else
+            echo "Deployment failed: ${{ steps.status.outputs.deployment_status }}"
+            exit 1
+          fi     
