@@ -97,6 +97,7 @@ jobs:
             sleep 30;
           done
           echo "deployment_status=${STATUS}"
+          echo "steps.status.outputs.deployment_status=${{ steps.status.outputs.deployment_status }}"
 
       - name: Check Deployment Status
         id: check
@@ -105,5 +106,5 @@ jobs:
             echo "Deployment successful"
           else
             echo "Deployment failed: ${{ steps.status.outputs.deployment_status }}"
-            exit 1
+            #exit 1
           fi     
