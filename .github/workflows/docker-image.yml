@@ -79,7 +79,7 @@ jobs:
 
           until [ "${STATUS}" == "OPERATION_IN_PROGRESS" ];
           do
-            echo "$(date) ${STATUS}"
+            echo "$(date) STATUS: ${STATUS}"
             STATUS=$(aws apprunner describe-service --query="Service.Status" --output=text --service-arn="${{ env.ECR_SERVICE_ARN }}")
             sleep 10;
           done
