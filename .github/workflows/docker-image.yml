@@ -13,7 +13,7 @@ env:
   REGISTRY: ghcr.io
   REPOSITORY: ${{ github.event.repository.name }}
   IMAGE_NAME: ${{ github.repository }}
-  ECR_SERVICE_ARN: arn:aws:apprunner:us-east-2:654654561932:service/mysql-cloud-server-dev/b5cd665d71304344a7a632d3bc42d7af
+  ECR_SERVICE_ARN: arn:aws:apprunner:us-east-2:654654561932:service/mysql-cloud-server-dev/f0a830810fb34a618d2b132725213ebd
   
 jobs:
 
